@@ -7,15 +7,7 @@
     "node": true,
     "shared-node-browser": true
   },
-  "ignorePatterns": [
-    "dist",
-    ".output",
-    "public",
-    "**/*.d.ts",
-    "**/*.config.js",
-    "**/*.config.ts",
-    "**/*.cjs"
-  ],
+  "ignorePatterns": ["dist", ".output", "public", "**/*.d.ts"],
   "rules": {
     "@typescript-eslint/no-explicit-any": "error",
     "curly": "error",
