@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#242c39" />
+      <stop offset="1" stop-color="#0d1016" />
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.42" r="0.72">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.05" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4ade80" stop-opacity="0" />
+      <stop offset="0.5" stop-color="#4ade80" stop-opacity="0.6" />
+      <stop offset="1" stop-color="#4ade80" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- 面板 -->
+  <rect width="1024" height="1024" rx="216" fill="url(#bg)" />
+  <rect width="1024" height="1024" rx="216" fill="url(#halo)" />
+
+  <!-- 键帽网格：4 行，前 3 行 6 键；底行左侧 2 倍宽键（Shift） -->
+  <g fill="#e1e6ee">
+    <!-- 第 1 行 -->
+    <rect x="144" y="260" width="106" height="106" rx="22" />
+    <rect x="270" y="260" width="106" height="106" rx="22" />
+    <rect x="396" y="260" width="106" height="106" rx="22" />
+    <rect x="522" y="260" width="106" height="106" rx="22" />
+    <rect x="774" y="260" width="106" height="106" rx="22" />
+    <!-- 第 2 行 -->
+    <rect x="144" y="390" width="106" height="106" rx="22" />
+    <rect x="270" y="390" width="106" height="106" rx="22" />
+    <rect x="396" y="390" width="106" height="106" rx="22" />
+    <rect x="522" y="390" width="106" height="106" rx="22" />
+    <rect x="648" y="390" width="106" height="106" rx="22" />
+    <rect x="774" y="390" width="106" height="106" rx="22" />
+    <!-- 第 3 行 -->
+    <rect x="144" y="520" width="106" height="106" rx="22" />
+    <rect x="270" y="520" width="106" height="106" rx="22" />
+    <rect x="396" y="520" width="106" height="106" rx="22" />
+    <rect x="522" y="520" width="106" height="106" rx="22" />
+    <rect x="648" y="520" width="106" height="106" rx="22" />
+    <rect x="774" y="520" width="106" height="106" rx="22" />
+    <!-- 第 4 行：Shift + 4 键 -->
+    <rect x="144" y="650" width="232" height="106" rx="22" />
+    <rect x="396" y="650" width="106" height="106" rx="22" />
+    <rect x="522" y="650" width="106" height="106" rx="22" />
+    <rect x="648" y="650" width="106" height="106" rx="22" />
+    <rect x="774" y="650" width="106" height="106" rx="22" />
+  </g>
+
+  <!-- 亮点键：指示灯位（第 1 行右侧第 2 键），2.4G 连接的含义 -->
+  <rect x="636" y="248" width="130" height="130" rx="30" fill="#4ade80" opacity="0.16" />
+  <rect x="648" y="260" width="106" height="106" rx="22" fill="#4ade80" />
+
+  <!-- 底部氛围光带 -->
+  <rect x="312" y="788" width="400" height="8" rx="4" fill="url(#glow)" />
+</svg>
