@@ -1,7 +1,7 @@
 name: release
 
 # 触发方式：
-# 1. 推送 tag（v1.0.0、v1.1.0 …）→ 自动构建并创建/更新 GitHub Release（草稿，需手动发布）
+# 1. 推送 tag（v1.0.0、v1.1.0 …）→ 自动构建并发布正式 Release（全自动，无需人工）
 # 2. 手动触发（Actions → release → Run workflow）→ 按 package.json 版本号生成 tag/release
 on:
   push:
@@ -46,5 +46,5 @@ jobs:
         with:
           tagName: v__VERSION__ # __VERSION__ 自动替换为 package.json 版本
           releaseName: "KBTool v__VERSION__"
-          releaseBody: "自动构建产物：Windows 安装包（NSIS/MSI）。发布前请核对后手动发布。"
-          releaseDraft: true # 草稿发布，避免误发；确认后到 Release 页手动 Publish
+          releaseBody: "自动构建产物：Windows 安装包（NSIS/MSI），由 GitHub Actions 自动发布。"
+          releaseDraft: false # 全自动：构建完成即发布正式版
