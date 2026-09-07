@@ -2,19 +2,38 @@ mod device;
 mod history;
 
 use history::HistoryLog;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, WebviewUrl};
+use tauri_plugin_notification::NotificationExt;
 
 use device::Battery;
 
 /// 用户主动退出标志：托盘菜单"退出"置位后 exit()，ExitRequested 不再拦截
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
-/// 唤起主窗口：已存在则显示+聚焦，已销毁（关窗省内存模式）则重建
+/// 开机自启注册时附加的命令行参数（写入注册表 Run 项），用于区分"开机拉起"与"手动启动"
+const AUTOSTART_ARG: &str = "--autostart";
+
+/// 静默启动配置路径：app_config/silent_start.json，内容 "1"=开启 "0"=关闭
+fn silent_start_path(app: &tauri::AppHandle) -> std::path::PathBuf {
+    app.path()
+        .app_config_dir()
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join("silent_start.json")
+}
+
+/// 读取静默启动开关；配置文件缺失视为开启（设置页默认勾选）
+fn silent_start_enabled(app: &tauri::AppHandle) -> bool {
+    std::fs::read_to_string(silent_start_path(app))
+        .map(|s| s.trim() == "1")
+        .unwrap_or(true)
+}
+
+/// 唤起主窗口：已存在则显示+聚焦，已销毁（关窗省内存模式）或未创建（静默启动）则重建
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -32,6 +51,10 @@ struct State {
     battery: Mutex<Option<Battery>>,
     /// 关窗行为：true = 直接退出程序；false = 销毁窗口、托盘常驻（设置页可切）
     close_quits: AtomicBool,
+    /// 低电量通知阈值（默认 30%，设置页可切；Rust 侧持有，静默托盘模式也生效）
+    notify_threshold: AtomicU8,
+    /// 低电量通知去重标记：≤ 阈值提醒一次，回升到阈值+5 以上才复位
+    notify_fired: AtomicBool,
     /// 电量历史日志（轮询线程写，命令读，同一把锁串行化）
     log: Mutex<HistoryLog>,
 }
@@ -54,6 +77,31 @@ fn battery_history(state: tauri::State<State>, since: u64, max_days: u32) -> Vec
 #[tauri::command]
 fn set_close_action(state: tauri::State<State>, quit: bool) {
     state.close_quits.store(quit, Ordering::SeqCst);
+}
+
+/// 读取低电量通知阈值（设置页回显用）
+#[tauri::command]
+fn get_notify_threshold(state: tauri::State<State>) -> u8 {
+    state.notify_threshold.load(Ordering::SeqCst)
+}
+
+/// 设置低电量通知阈值（上限 100）
+#[tauri::command]
+fn set_notify_threshold(state: tauri::State<State>, threshold: u8) {
+    state.notify_threshold.store(threshold.min(100), Ordering::SeqCst);
+}
+
+/// 读取静默启动开关（前端设置页用；缺失即默认开启）
+#[tauri::command]
+fn get_silent_start(app: tauri::AppHandle) -> bool {
+    silent_start_enabled(&app)
+}
+
+/// 持久化静默启动开关到 app_config/silent_start.json，下次开机自启时生效
+#[tauri::command]
+fn set_silent_start(app: tauri::AppHandle, silent: bool) -> Result<(), String> {
+    std::fs::write(silent_start_path(&app), if silent { "1" } else { "0" })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -106,6 +154,28 @@ fn spawn_poller(app: tauri::AppHandle) {
                                 t: ts,
                             };
                             let _ = app.emit("battery", &b);
+                            // 低电量通知与 WebView 解耦（静默托盘 / 收起至托盘均生效）：
+                            // 不充电且 ≤ 阈值时提醒一次，回升到阈值+5 以上才复位重报
+                            let st = app.state::<State>();
+                            if !b.charging
+                                && b.percent <= st.notify_threshold.load(Ordering::SeqCst)
+                                && !st.notify_fired.swap(true, Ordering::SeqCst)
+                            {
+                                let _ = app
+                                    .notification()
+                                    .builder()
+                                    .title("键盘电量过低")
+                                    .body(format!(
+                                        "当前电量 {}%，请及时充电（仅支持电脑 USB 口充电）",
+                                        pct
+                                    ))
+                                    .show();
+                            } else if !b.charging
+                                && b.percent
+                                    > st.notify_threshold.load(Ordering::SeqCst).saturating_add(5)
+                            {
+                                st.notify_fired.store(false, Ordering::SeqCst);
+                            }
                             // 托盘悬停显示实时电量
                             if let Some(tray) = app.tray_by_id("main-tray") {
                                 let tip = if b.charging {
@@ -141,7 +211,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec![AUTOSTART_ARG]), // 注册项始终带参数，开机拉起时据此区分“自启”与“手动启动”
         ))
         .setup(|app| {
             // 状态（含电量历史日志，路径在 app data 下）在 setup 里 resolve 后再 manage
@@ -153,6 +223,8 @@ pub fn run() {
             app.manage(State {
                 battery: Mutex::new(None),
                 close_quits: AtomicBool::new(false),
+                notify_threshold: AtomicU8::new(30),
+                notify_fired: AtomicBool::new(false),
                 log: Mutex::new(HistoryLog::new(log_path)),
             });
 
@@ -186,6 +258,14 @@ pub fn run() {
                 .build(app)?;
 
             spawn_poller(app.handle().clone());
+
+            // 主窗口不再由 tauri.conf.json 自动创建，改为这里按需创建：
+            // 静默启动（开机自启拉起 && 开关开启）时不建窗口，直接托盘驻留，省内存；
+            // 手动双击启动 / 未开静默时照常弹出。
+            let from_autostart = std::env::args().any(|a| a == AUTOSTART_ARG);
+            if !(from_autostart && silent_start_enabled(app.handle())) {
+                show_main_window(app.handle());
+            }
             Ok(())
         })
         // 关窗行为（设置页可切）：
@@ -211,6 +291,10 @@ pub fn run() {
             battery_status,
             battery_history,
             set_close_action,
+            get_notify_threshold,
+            set_notify_threshold,
+            get_silent_start,
+            set_silent_start,
             set_light,
             set_kbd_params
         ])

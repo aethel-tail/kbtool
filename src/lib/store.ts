@@ -12,6 +12,8 @@ export const settings = reactive({
   threshold: 30,
   pollSec: 15,
   autostart: false,
+  // 静默启动：默认开启；仅开机自启开启时可勾选（由 Rust 持久化到 app_config/silent_start.json）
+  silentStart: true,
   // 关窗行为：false = 收起（销毁窗口、托盘常驻）；true = 直接退出程序
   closeQuits: false,
 });
@@ -78,22 +80,7 @@ export function mergeSamples(list: Sample[]) {
   }
 }
 
-// 低电量通知去重: 低于阈值且未通知过 -> 通知一次; 回升到阈值+5 以上重置
-export const notifState = reactive({ fired: false });
-
-export function checkLowBattery(percent: number, charging: boolean): boolean {
-  if (charging) {
-    return false;
-  }
-  if (percent <= settings.threshold && !notifState.fired) {
-    notifState.fired = true;
-    return true;
-  }
-  if (percent > settings.threshold + 5) {
-    notifState.fired = false;
-  }
-  return false;
-}
+// 低电量通知去重已下沉 Rust（轮询线程，静默托盘模式也生效），见 src-tauri/src/lib.rs
 
 // ===== 灯光/键盘参数偏好（跨页面切换 + 跨重启持久化）=====
 // 语义见 findings.md：模式 1-19(0=关灯) RGB 多彩 亮度1-5 速度1-5 方向0-3；休眠档0-3 响应档1-5

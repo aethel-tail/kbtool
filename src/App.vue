@@ -3,19 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import type { Component } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-} from "@tauri-apps/plugin-notification";
-import {
-  battery,
-  samples,
-  checkLowBattery,
-  mergeSamples,
-  pushSample,
-  loadPrefs,
-} from "./lib/store";
+import { battery, samples, mergeSamples, pushSample, loadPrefs } from "./lib/store";
 import HomeView from "./views/HomeView.vue";
 import KeymapView from "./views/KeymapView.vue";
 import LightingView from "./views/LightingView.vue";
@@ -39,19 +27,6 @@ const views: Record<string, Component> = {
 };
 const currentView = computed(() => views[active.value]);
 
-async function notifyLowBattery(p: number) {
-  let granted = await isPermissionGranted();
-  if (!granted) {
-    granted = (await requestPermission()) === "granted";
-  }
-  if (granted) {
-    sendNotification({
-      title: "键盘电量过低",
-      body: `当前电量 ${p}%，请及时充电（仅支持电脑 USB 口充电）`,
-    });
-  }
-}
-
 interface BatteryPayload {
   percent: number;
   iface: string;
@@ -72,9 +47,7 @@ onMounted(async () => {
     battery.iface = b.iface;
     battery.charging = b.charging;
     pushSample({ t: Math.floor(b.t ?? sampleNow()), p: b.percent, c: b.charging });
-    if (checkLowBattery(b.percent, b.charging)) {
-      notifyLowBattery(b.percent);
-    }
+    // 低电量通知由 Rust 轮询线程统一发送（静默托盘模式也无窗口依赖），前端不再重复提醒
   });
 
   // 持久化历史：重启后全量载入近 35 天；窗口重建时只取上次之后的部分

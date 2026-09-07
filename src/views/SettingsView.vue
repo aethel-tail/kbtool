@@ -5,12 +5,31 @@ import { invoke } from "@tauri-apps/api/core";
 import { settings } from "../lib/store";
 
 const autostart = ref(false);
+// 静默启动：默认勾选；仅开机自启开启时可修改（后端持久化，下次开机生效）
+const silentStart = ref(true);
 const CLOSE_KEY = "kbtool.closeQuits";
 
 onMounted(async () => {
   try {
     autostart.value = await isEnabled();
     settings.autostart = autostart.value;
+    // 旧版本已注册的自启项不带 --autostart 参数，重写一次补齐，静默启动才能识别开机拉起
+    if (autostart.value) {
+      await enable();
+    }
+  } catch {
+    /* 忽略 */
+  }
+  // 恢复上次的静默启动选择（配置文件缺失即默认开启）
+  try {
+    silentStart.value = await invoke<boolean>("get_silent_start");
+    settings.silentStart = silentStart.value;
+  } catch {
+    /* 忽略 */
+  }
+  // 回显后端通知阈值（Rust 线程发通知，重启/重建窗口后以 Rust 侧为准）
+  try {
+    settings.threshold = await invoke<number>("get_notify_threshold");
   } catch {
     /* 忽略 */
   }
@@ -50,6 +69,30 @@ async function toggleAutostart() {
     /* 忽略 */
   }
 }
+
+async function onThreshold(e: Event) {
+  settings.threshold = Number((e.target as HTMLSelectElement).value);
+  // 通知在 Rust 轮询线程发送，阈值需同步过去
+  try {
+    await invoke("set_notify_threshold", { threshold: settings.threshold });
+  } catch {
+    /* 忽略 */
+  }
+}
+
+// 静默启动：仅开机自启开启时可勾选（下次开机自启时直接驻留托盘，不弹主窗口）
+async function toggleSilentStart() {
+  if (!autostart.value) {
+    return;
+  }
+  silentStart.value = !silentStart.value;
+  settings.silentStart = silentStart.value;
+  try {
+    await invoke("set_silent_start", { silent: silentStart.value });
+  } catch {
+    /* 忽略 */
+  }
+}
 </script>
 
 <template>
@@ -66,10 +109,24 @@ async function toggleAutostart() {
       </div>
       <div class="setting-row">
         <div>
+          <div class="t">静默启动</div>
+          <div class="d">
+            开机自启时直接驻留后台，不弹出主窗口（需先勾选上方“开机自启”才能修改）
+          </div>
+        </div>
+        <div
+          class="toggle"
+          :class="{ on: silentStart, disabled: !autostart }"
+          :title="autostart ? '' : '需先开启开机自启'"
+          @click="toggleSilentStart"
+        ></div>
+      </div>
+      <div class="setting-row">
+        <div>
           <div class="t">低电量通知</div>
           <div class="d">低于阈值时发送系统通知</div>
         </div>
-        <select v-model.number="settings.threshold">
+        <select :value="settings.threshold" @change="onThreshold">
           <option :value="30">30%</option>
           <option :value="20">20%</option>
           <option :value="10">10%</option>
@@ -104,7 +161,7 @@ async function toggleAutostart() {
       <div class="setting-row">
         <div>
           <div class="t">关于</div>
-          <div class="d">KBTool v1.0.0 · MIT 开源 · 非官方工具</div>
+          <div class="d">KBTool v1.1.0 · MIT 开源 · 非官方工具</div>
         </div>
         <span style="font-size: 12.5px; color: var(--dimmer)">docs/操作指南.md</span>
       </div>

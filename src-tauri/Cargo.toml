@@ -1,6 +1,6 @@
 [package]
 name = "kbtool"
-version = "1.0.0"
+version = "1.1.0"
 description = "98-key tri-mode keyboard config tool"
 authors = ["aethel-tail", "OpenKB Community"]
 license = "MIT"
