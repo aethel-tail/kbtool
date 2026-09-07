@@ -1,0 +1,50 @@
+name: release
+
+# 触发方式：
+# 1. 推送 tag（v1.0.0、v1.1.0 …）→ 自动构建并创建/更新 GitHub Release（草稿，需手动发布）
+# 2. 手动触发（Actions → release → Run workflow）→ 按 package.json 版本号生成 tag/release
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest # KBTool 为 Windows 桌面工具；如后续需要 macOS/Linux 构建，在此追加矩阵
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4 # 版本取自 package.json 的 packageManager 字段
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build & publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__ # __VERSION__ 自动替换为 package.json 版本
+          releaseName: "KBTool v__VERSION__"
+          releaseBody: "自动构建产物：Windows 安装包（NSIS/MSI）。发布前请核对后手动发布。"
+          releaseDraft: true # 草稿发布，避免误发；确认后到 Release 页手动 Publish
